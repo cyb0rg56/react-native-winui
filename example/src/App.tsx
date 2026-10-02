@@ -15,7 +15,7 @@ import {
   InfoBar,
   NumberBox,
   ProgressBar,
-  RadioButton,
+  RadioGroup,
   RatingControl,
   resolveWinuiTheme,
   type WinuiTheme,
@@ -51,7 +51,7 @@ export default function App() {
   const [mountKey, setMountKey] = useState(0);
   const [theme, setTheme] = useState<WinuiTheme | undefined>(undefined);
   const [comboIndex, setComboIndex] = useState(2);
-  const [number, setNumber] = useState(4);
+  const [number, setNumber] = useState<number | null>(4);
   const [checked, setChecked] = useState(false);
   const [radio, setRadio] = useState('left');
   const [rating, setRating] = useState(3);
@@ -164,7 +164,8 @@ export default function App() {
           minimum={0}
           maximum={10}
           step={1}
-          onValueChange={(event) => setNumber(event.nativeEvent.value)}
+          spinButtons="compact"
+          onChange={(value) => setNumber(value)}
           style={styles.field}
         />
 
@@ -190,23 +191,19 @@ export default function App() {
             { color: colors.ink, backgroundColor: colors.page },
           ]}
         >
-          RadioButton
+          RadioGroup
         </Text>
-        {(['left', 'top', 'hidden'] as const).map((value) => (
-          <RadioButton
-            key={value}
-            theme={theme}
-            label={value}
-            group="pane"
-            checked={radio === value}
-            onCheckedChange={(event) => {
-              if (event.nativeEvent.checked) {
-                setRadio(value);
-              }
-            }}
-            style={styles.hug}
-          />
-        ))}
+        <RadioGroup
+          theme={theme}
+          value={radio}
+          onChange={setRadio}
+          options={[
+            { label: 'left', value: 'left' },
+            { label: 'top', value: 'top' },
+            { label: 'hidden', value: 'hidden' },
+          ]}
+          style={styles.hug}
+        />
 
         <Text
           style={[

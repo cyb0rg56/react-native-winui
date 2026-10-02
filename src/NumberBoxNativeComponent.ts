@@ -8,13 +8,17 @@ import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNati
 
 export type NumberBoxChangeEvent = Readonly<{
   value: Double;
+  /** True when the box is cleared. `value` is 0 in that case. */
+  isEmpty: boolean;
 }>;
 
 export interface NumberBoxProps extends ViewProps {
-  value?: WithDefault<Double, 0>;
+  /** Omit to show an empty box. */
+  value?: Double;
   minimum?: Double;
   maximum?: Double;
   step?: Double;
+  spinButtons?: WithDefault<'hidden' | 'compact' | 'inline', 'compact'>;
   placeholder?: string;
   disabled?: WithDefault<boolean, false>;
   theme?: WithDefault<'light' | 'dark' | 'system', 'system'>;

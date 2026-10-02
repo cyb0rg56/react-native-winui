@@ -12,6 +12,10 @@ export type RadioButtonChangeEvent = Readonly<{
 export interface RadioButtonProps extends ViewProps {
   label?: string;
   checked?: WithDefault<boolean, false>;
+  /**
+   * WinUI group name. Each control is its own XAML island, so this does not
+   * uncheck sibling radios. Use RadioGroup to manage a selection.
+   */
   group?: string;
   disabled?: WithDefault<boolean, false>;
   theme?: WithDefault<'light' | 'dark' | 'system', 'system'>;

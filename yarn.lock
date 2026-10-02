@@ -11322,8 +11322,6 @@ __metadata:
     "@babel/preset-env": ^7.25.3
     "@babel/runtime": ^7.25.0
     "@react-native-community/cli": 20.1.0
-    "@react-native-community/cli-platform-android": 20.1.0
-    "@react-native-community/cli-platform-ios": 20.1.0
     "@react-native/babel-preset": 0.84.0
     "@react-native/metro-config": 0.84.0
     "@react-native/new-app-screen": 0.84.0
@@ -11368,8 +11366,8 @@ __metadata:
     turbo: ^1.10.7
     typescript: ^5.2.2
   peerDependencies:
-    react: "*"
-    react-native: "*"
+    react: ">=19.0.0"
+    react-native: ">=0.82.0"
     react-native-windows: ">=0.82.0"
   languageName: unknown
   linkType: soft

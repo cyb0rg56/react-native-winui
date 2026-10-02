@@ -23,9 +23,7 @@ The [example app](/example/) demonstrates usage of the library. You need to run 
 
 It is configured to use the local version of the library, so any changes you make to the library's source code will be reflected in the example app. Changes to the library's JavaScript code will be reflected in the example app without a rebuild, but native code changes will require a rebuild of the example app.
 
-If you want to use Android Studio or XCode to edit the native code, you can open the `example/android` or `example/ios` directories respectively in those editors. To edit the Objective-C or Swift files, open `example/ios/WinuiExample.xcworkspace` in XCode and find the source files at `Pods > Development Pods > react-native-winui`.
-
-To edit the Java or Kotlin files, open `example/android` in Android studio and find the source files at `react-native-winui` under `Android`.
+The library is Windows-only. Open `example/windows/WinuiExample.sln` in Visual Studio 2026 to build the example, or run `yarn example windows` from the repository root. Native sources live in `windows/Winui`.
 
 You can use various commands from the root directory to work with the project.
 
@@ -35,16 +33,10 @@ To start the packager:
 yarn example start
 ```
 
-To run the example app on Android:
+To run the example app on Windows:
 
 ```sh
-yarn example android
-```
-
-To run the example app on iOS:
-
-```sh
-yarn example ios
+yarn example windows
 ```
 
 To confirm that the app is running with the new architecture, you can check the Metro logs for a message like this:
@@ -114,8 +106,7 @@ The `package.json` file contains various scripts for common tasks:
 - `yarn lint`: lint files with ESLint.
 - `yarn test`: run unit tests with Jest.
 - `yarn example start`: start the Metro server for the example app.
-- `yarn example android`: run the example app on Android.
-- `yarn example ios`: run the example app on iOS.
+- `yarn example windows`: run the example app on Windows.
 
 ### Sending a pull request
 

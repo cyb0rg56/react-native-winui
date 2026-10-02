@@ -6,8 +6,10 @@ import type {
 import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
 
 export interface ProgressBarProps extends ViewProps {
-  /** Progress from 0 to 100. Ignored while isIndeterminate is true. */
+  /** Progress from `minimum` to `maximum`. Ignored while isIndeterminate is true. */
   value?: WithDefault<Double, 0>;
+  minimum?: WithDefault<Double, 0>;
+  maximum?: WithDefault<Double, 100>;
   isIndeterminate?: WithDefault<boolean, false>;
   disabled?: WithDefault<boolean, false>;
   theme?: WithDefault<'light' | 'dark' | 'system', 'system'>;

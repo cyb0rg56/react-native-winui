@@ -5,68 +5,56 @@
 #include "XamlControl.h"
 #include "codegen/react/components/RNWinuiSpec/InfoBadge.g.h"
 
-#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 namespace winrt::Winui {
 
 struct InfoBadgeComponentView
     : winrt::implements<InfoBadgeComponentView, winrt::IInspectable>,
-      winuiCodegen::BaseInfoBadge<InfoBadgeComponentView> {
+      XamlComponentView<
+          InfoBadgeComponentView,
+          winuiCodegen::BaseInfoBadge<InfoBadgeComponentView>,
+          winrt::Microsoft::UI::Xaml::Controls::InfoBadge> {
   void Attach(winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView const& view) {
-    m_badge = winrt::Microsoft::UI::Xaml::Controls::InfoBadge();
-    winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(m_badge, L"Badge");
-    auto weakThis = get_weak();
-    m_sizeRevoker = m_badge.SizeChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->m_session.Invalidate();
-      }
-    });
-    m_session.Attach(view, m_badge);
-  }
-
-  ~InfoBadgeComponentView() {
-    m_session.Close();
+    Host(view, winrt::Microsoft::UI::Xaml::Controls::InfoBadge());
   }
 
   void UpdateProps(
       winrt::Microsoft::ReactNative::ComponentView const& view,
       winrt::com_ptr<winuiCodegen::InfoBadgeProps> const& newProps,
-      winrt::com_ptr<winuiCodegen::InfoBadgeProps> const&) noexcept override {
-    BaseInfoBadge::UpdateProps(view, newProps, nullptr);
-    if (!newProps || !m_badge) {
-      return;
-    }
+      winrt::com_ptr<winuiCodegen::InfoBadgeProps> const& oldProps) noexcept override {
+    winuiCodegen::BaseInfoBadge<InfoBadgeComponentView>::UpdateProps(view, newProps, oldProps);
+    GuardedCall(L"InfoBadge.UpdateProps", [&] {
+      if (!newProps || !m_control) {
+        return;
+      }
 
-    PrepareElement(m_badge, newProps->theme, newProps->disabled);
-    m_badge.Value(newProps->value);
-    m_session.Invalidate();
+      bool changed = !oldProps;
+      if (ChromeChanged(newProps, oldProps)) {
+        PrepareElement(m_control, newProps->theme, newProps->disabled, newProps->ViewProps, m_session);
+        changed = true;
+      }
+      if (!oldProps || oldProps->value != newProps->value) {
+        m_control.Value(newProps->value);
+        if (newProps->value < 0) {
+          m_control.Width(28);
+        } else {
+          m_control.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::WidthProperty());
+        }
+        changed = true;
+      }
+      if (changed) {
+        m_session.Invalidate();
+      }
+    });
   }
-
-  void UpdateState(
-      winrt::Microsoft::ReactNative::ComponentView const&,
-      winrt::Microsoft::ReactNative::IComponentState const& newState) noexcept override {
-    m_state = newState;
-    m_session.SetState(newState);
-  }
-
- private:
-  XamlIslandSession m_session;
-  winrt::Microsoft::UI::Xaml::Controls::InfoBadge m_badge{nullptr};
-  winrt::Microsoft::ReactNative::IComponentState m_state{nullptr};
-  winrt::Microsoft::UI::Xaml::FrameworkElement::SizeChanged_revoker m_sizeRevoker;
 };
 
 } // namespace winrt::Winui
 
-void RegisterInfoBadgeComponentView(
-    winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
+void RegisterInfoBadgeComponentView(winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
   winuiCodegen::RegisterInfoBadgeNativeComponent<winrt::Winui::InfoBadgeComponentView>(
       packageBuilder, [](auto const& builder) {
-        winrt::Winui::ConfigureXamlIsland(builder, {28, 28}, [](auto const& view) {
-          auto userData = winrt::make_self<winrt::Winui::InfoBadgeComponentView>();
-          userData->Attach(view);
-          view.UserData(*userData);
-        });
+        winrt::Winui::RegisterHostedControl<winrt::Winui::InfoBadgeComponentView>(builder, {28, 28});
       });
 }

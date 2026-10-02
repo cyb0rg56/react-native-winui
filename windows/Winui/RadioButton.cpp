@@ -11,65 +11,71 @@ namespace winrt::Winui {
 
 struct RadioButtonComponentView
     : winrt::implements<RadioButtonComponentView, winrt::IInspectable>,
-      winuiCodegen::BaseRadioButton<RadioButtonComponentView> {
+      XamlComponentView<
+          RadioButtonComponentView,
+          winuiCodegen::BaseRadioButton<RadioButtonComponentView>,
+          winrt::Microsoft::UI::Xaml::Controls::RadioButton> {
   void Attach(winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView const& view) {
-    m_radio = winrt::Microsoft::UI::Xaml::Controls::RadioButton();
-    auto weakThis = get_weak();
-    m_sizeRevoker = m_radio.SizeChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->m_session.Invalidate();
-      }
-    });
-    AttachEvents();
-    m_session.Attach(view, m_radio);
-  }
-
-  ~RadioButtonComponentView() {
-    m_session.Close();
+    Host(view, winrt::Microsoft::UI::Xaml::Controls::RadioButton());
   }
 
   void UpdateProps(
       winrt::Microsoft::ReactNative::ComponentView const& view,
       winrt::com_ptr<winuiCodegen::RadioButtonProps> const& newProps,
-      winrt::com_ptr<winuiCodegen::RadioButtonProps> const&) noexcept override {
-    BaseRadioButton::UpdateProps(view, newProps, nullptr);
-    if (!newProps || !m_radio) {
-      return;
-    }
+      winrt::com_ptr<winuiCodegen::RadioButtonProps> const& oldProps) noexcept override {
+    winuiCodegen::BaseRadioButton<RadioButtonComponentView>::UpdateProps(view, newProps, oldProps);
+    GuardedCall(L"RadioButton.UpdateProps", [&] {
+      if (!newProps || !m_control) {
+        return;
+      }
 
-    WithEventsSuspended([&] {
-      PrepareElement(m_radio, newProps->theme, newProps->disabled);
-      m_radio.Content(winrt::box_value(ToHString(newProps->label)));
-      m_radio.GroupName(ToHString(newProps->group));
-      m_radio.IsChecked(newProps->checked.value_or(false));
+      bool changed = !oldProps;
+      WithEventsSuspended([&] {
+        if (ChromeChanged(newProps, oldProps)) {
+          PrepareElement(m_control, newProps->theme, newProps->disabled, newProps->ViewProps, m_session);
+          changed = true;
+        }
+        if (!oldProps || oldProps->label != newProps->label) {
+          m_control.Content(winrt::box_value(ToHString(newProps->label)));
+          changed = true;
+        }
+        // GroupName is scoped to one XAML island, so it does not uncheck
+        // radios hosted by sibling component views. RadioGroup owns that.
+        if (!oldProps || oldProps->group != newProps->group) {
+          m_control.GroupName(ToHString(newProps->group));
+          changed = true;
+        }
+        if (!oldProps || oldProps->checked != newProps->checked) {
+          ApplyChecked(*newProps);
+          changed = true;
+        }
+      });
+      if (changed) {
+        m_session.Invalidate();
+      }
     });
-    m_session.Invalidate();
   }
 
-  void UpdateState(
-      winrt::Microsoft::ReactNative::ComponentView const&,
-      winrt::Microsoft::ReactNative::IComponentState const& newState) noexcept override {
-    m_state = newState;
-    m_session.SetState(newState);
-  }
-
- private:
-  void AttachEvents() {
+ protected:
+  void AttachEvents() override {
     auto weakThis = get_weak();
     auto handler = [weakThis](auto const&, auto const&) {
       if (auto self = weakThis.get()) {
-        self->EmitChange();
+        GuardedCall(L"RadioButton.Checked", [&] { self->EmitChange(); });
       }
     };
-    m_checkedRevoker = m_radio.Checked(winrt::auto_revoke, handler);
-    m_uncheckedRevoker = m_radio.Unchecked(winrt::auto_revoke, handler);
+    m_checkedRevoker = m_control.Checked(winrt::auto_revoke, handler);
+    m_uncheckedRevoker = m_control.Unchecked(winrt::auto_revoke, handler);
   }
 
-  void WithEventsSuspended(auto&& action) {
+  void DetachEvents() override {
     m_checkedRevoker.revoke();
     m_uncheckedRevoker.revoke();
-    action();
-    AttachEvents();
+  }
+
+ private:
+  void ApplyChecked(winuiCodegen::RadioButtonProps const& props) {
+    m_control.IsChecked(props.checked.value_or(false));
   }
 
   void EmitChange() {
@@ -78,30 +84,22 @@ struct RadioButtonComponentView
       return;
     }
     winuiCodegen::RadioButtonSpec_onCheckedChange args{};
-    if (auto checked = m_radio.IsChecked()) {
+    if (auto checked = m_control.IsChecked()) {
       args.checked = checked.Value();
     }
     emitter->onCheckedChange(std::move(args));
+    RestoreProps([this](winuiCodegen::RadioButtonProps const& props) { ApplyChecked(props); });
   }
 
-  XamlIslandSession m_session;
-  winrt::Microsoft::UI::Xaml::Controls::RadioButton m_radio{nullptr};
-  winrt::Microsoft::ReactNative::IComponentState m_state{nullptr};
   winrt::Microsoft::UI::Xaml::Controls::RadioButton::Checked_revoker m_checkedRevoker;
   winrt::Microsoft::UI::Xaml::Controls::RadioButton::Unchecked_revoker m_uncheckedRevoker;
-  winrt::Microsoft::UI::Xaml::FrameworkElement::SizeChanged_revoker m_sizeRevoker;
 };
 
 } // namespace winrt::Winui
 
-void RegisterRadioButtonComponentView(
-    winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
+void RegisterRadioButtonComponentView(winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
   winuiCodegen::RegisterRadioButtonNativeComponent<winrt::Winui::RadioButtonComponentView>(
       packageBuilder, [](auto const& builder) {
-        winrt::Winui::ConfigureXamlIsland(builder, {200, 32}, [](auto const& view) {
-          auto userData = winrt::make_self<winrt::Winui::RadioButtonComponentView>();
-          userData->Attach(view);
-          view.UserData(*userData);
-        });
+        winrt::Winui::RegisterHostedControl<winrt::Winui::RadioButtonComponentView>(builder, {160, 40});
       });
 }
