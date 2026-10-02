@@ -26,12 +26,17 @@
     "cpp",
     "*.podspec",
     "react-native.config.js",
+    "windows",
     "!ios/build",
     "!android/build",
     "!android/gradle",
     "!android/gradlew",
     "!android/gradlew.bat",
     "!android/local.properties",
+    "!windows/**/ARM64",
+    "!windows/**/x64",
+    "!windows/**/Win32",
+    "!windows/**/*.user",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -48,8 +53,10 @@
   },
   "keywords": [
     "react-native",
-    "ios",
-    "android"
+    "react-native-windows",
+    "windows",
+    "winui",
+    "winui3"
   ],
   "repository": {
     "type": "git",
@@ -68,10 +75,12 @@
     "@commitlint/config-conventional": "^19.6.0",
     "@evilmartians/lefthook": "^1.5.0",
     "@react-native-community/cli": "20.1.0",
+    "@react-native/babel-preset": "0.84.0",
     "@react-native/eslint-config": "^0.73.1",
     "@release-it/conventional-changelog": "^9.0.2",
     "@types/jest": "^29.5.5",
     "@types/react": "^19.2.0",
+    "@types/react-test-renderer": "19.1.0",
     "commitlint": "^19.6.1",
     "del-cli": "^5.1.0",
     "eslint": "^8.51.0",
@@ -82,13 +91,16 @@
     "react": "19.2.3",
     "react-native": "0.84.0",
     "react-native-builder-bob": "^0.38.3",
+    "react-native-windows": "^0.84.0",
+    "react-test-renderer": "19.2.3",
     "release-it": "^17.10.0",
     "turbo": "^1.10.7",
     "typescript": "^5.2.2"
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-windows": ">=0.82.0"
   },
   "workspaces": [
     "example"
@@ -183,7 +195,7 @@
   },
   "codegenConfig": {
     "name": "RNWinuiSpec",
-    "type": "modules",
+    "type": "all",
     "jsSrcsDir": "src",
     "outputDir": {
       "ios": "ios/generated",
@@ -192,11 +204,27 @@
     "android": {
       "javaPackageName": "com.winui"
     },
-    "includesGeneratedCode": true
+    "includesGeneratedCode": true,
+    "windows": {
+      "namespace": "winuiCodegen",
+      "generators": [
+        "modulesWindows",
+        "componentsWindows"
+      ],
+      "outputDirectory": "windows/Winui/codegen",
+      "separateDataTypes": true
+    }
   },
   "create-react-native-library": {
     "languages": "kotlin-objc",
     "type": "turbo-module",
     "version": "0.48.9"
+  },
+  "react-native-windows": {
+    "init-windows": {
+      "name": "Winui",
+      "namespace": "Winui",
+      "template": "cpp-lib"
+    }
   }
 }
