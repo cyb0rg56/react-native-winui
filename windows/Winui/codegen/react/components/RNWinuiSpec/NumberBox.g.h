@@ -29,6 +29,7 @@ struct NumberBoxProps : winrt::implements<NumberBoxProps, winrt::Microsoft::Reac
        minimum = cloneFromProps->minimum;
        maximum = cloneFromProps->maximum;
        step = cloneFromProps->step;
+       spinButtons = cloneFromProps->spinButtons;
        placeholder = cloneFromProps->placeholder;
        disabled = cloneFromProps->disabled;
        theme = cloneFromProps->theme;
@@ -52,6 +53,9 @@ struct NumberBoxProps : winrt::implements<NumberBoxProps, winrt::Microsoft::Reac
   REACT_FIELD(step)
   std::optional<double> step{};
 
+  REACT_FIELD(spinButtons)
+  std::optional<std::string> spinButtons;
+
   REACT_FIELD(placeholder)
   std::optional<std::string> placeholder;
 
@@ -72,6 +76,9 @@ REACT_STRUCT(NumberBoxSpec_onValueChange)
 struct NumberBoxSpec_onValueChange {
   REACT_FIELD(value)
   double value{};
+
+  REACT_FIELD(isEmpty)
+  bool isEmpty{};
 };
 
 struct NumberBoxEventEmitter {

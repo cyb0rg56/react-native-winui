@@ -5,25 +5,12 @@
 #include <cmath>
 #include <limits>
 
-#include <winrt/Microsoft.UI.Xaml.Automation.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
 
 namespace winrt::Winui {
 
-constexpr double kControlFontSize = 24.0;
-constexpr double kControlMinHeight = 56.0;
-constexpr double kToggleGlyph = 24.0;
-constexpr double kRatingFontSize = 36.0;
-constexpr double kBadgeSize = 28.0;
-
 namespace {
-
-bool SameSize(
-    winrt::Windows::Foundation::Size const& left,
-    winrt::Windows::Foundation::Size const& right) noexcept {
-  return left.Width == right.Width && left.Height == right.Height;
-}
 
 struct MeasuringGuard {
   bool& measuring;
@@ -35,197 +22,213 @@ struct MeasuringGuard {
   }
 };
 
-enum class DensityKind { Standard, Toggle, Rating, Badge };
-
-bool Near(double value, double target) noexcept {
-  return std::abs(value - target) < 0.5;
+bool SameSize(
+    winrt::Windows::Foundation::Size const& left,
+    winrt::Windows::Foundation::Size const& right) noexcept {
+  return left.Width == right.Width && left.Height == right.Height;
 }
 
-void ScaleSquare(winrt::Microsoft::UI::Xaml::FrameworkElement const& element, double from, double to) {
-  if (Near(element.Width(), from) && Near(element.Height(), from)) {
-    auto const scaled = element.Width() * (to / from);
-    element.Width(scaled);
-    element.Height(scaled);
-  }
-}
-
-void ApplyVisualDensity(
-    winrt::Microsoft::UI::Xaml::DependencyObject const& node,
-    DensityKind kind) {
-  if (!node) {
+void ApplyTheme(
+    winrt::Microsoft::UI::Xaml::FrameworkElement const& element,
+    std::string const& theme,
+    winrt::Windows::UI::ViewManagement::AccessibilitySettings const& accessibility) {
+  if (accessibility && accessibility.HighContrast()) {
+    element.HighContrastAdjustment(winrt::Microsoft::UI::Xaml::ElementHighContrastAdjustment::Auto);
+    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Default);
     return;
   }
 
-  // The ComboBox popup is a child of the control. Leave its items at the
-  // standard row size instead of stretching them to the closed-control chrome.
-  if (node.try_as<winrt::Microsoft::UI::Xaml::Controls::Primitives::Popup>() ||
-      node.try_as<winrt::Microsoft::UI::Xaml::Controls::ComboBoxItem>()) {
-    return;
-  }
-
-  if (node.try_as<winrt::Microsoft::UI::Xaml::Controls::CheckBox>() ||
-      node.try_as<winrt::Microsoft::UI::Xaml::Controls::RadioButton>()) {
-    kind = DensityKind::Toggle;
-  } else if (node.try_as<winrt::Microsoft::UI::Xaml::Controls::RatingControl>()) {
-    kind = DensityKind::Rating;
-  } else if (node.try_as<winrt::Microsoft::UI::Xaml::Controls::InfoBadge>()) {
-    kind = DensityKind::Badge;
-  }
-
-  auto const fontSize = kind == DensityKind::Rating ? kRatingFontSize : kControlFontSize;
-
-  if (kind == DensityKind::Toggle) {
-    // The glyph row is a fixed 32px grid pinned to the top, while the label is
-    // centered in the control. That leaves the box sitting above the text once
-    // the label is larger than the glyph.
-    if (auto const control = node.try_as<winrt::Microsoft::UI::Xaml::Controls::Control>()) {
-      control.VerticalContentAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-      control.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MinHeightProperty());
-    }
-    if (auto const presenter = node.try_as<winrt::Microsoft::UI::Xaml::Controls::ContentPresenter>()) {
-      presenter.FontSize(fontSize);
-      presenter.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-      presenter.Margin(winrt::Microsoft::UI::Xaml::Thickness{8, 0, 0, 0});
-    }
-    if (auto const text = node.try_as<winrt::Microsoft::UI::Xaml::Controls::TextBlock>()) {
-      text.FontSize(fontSize);
-      text.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-    }
-    if (auto const icon = node.try_as<winrt::Microsoft::UI::Xaml::Controls::FontIcon>()) {
-      icon.FontSize(18);
-      icon.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-      icon.HorizontalAlignment(winrt::Microsoft::UI::Xaml::HorizontalAlignment::Center);
-    }
-    if (auto const element = node.try_as<winrt::Microsoft::UI::Xaml::FrameworkElement>()) {
-      ScaleSquare(element, 20, kToggleGlyph);
-      ScaleSquare(element, 12, kToggleGlyph * 12.0 / 20.0);
-      if (Near(element.Height(), 32) &&
-          element.VerticalAlignment() == winrt::Microsoft::UI::Xaml::VerticalAlignment::Top) {
-        element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::HeightProperty());
-        element.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-      }
-    }
-    if (auto const grid = node.try_as<winrt::Microsoft::UI::Xaml::Controls::Grid>()) {
-      auto const columns = grid.ColumnDefinitions();
-      if (columns.Size() > 0) {
-        auto const column = columns.GetAt(0);
-        auto const width = column.Width();
-        if (width.GridUnitType == winrt::Microsoft::UI::Xaml::GridUnitType::Pixel && width.Value > 0 &&
-            width.Value <= 22) {
-          column.Width(winrt::Microsoft::UI::Xaml::GridLength{kToggleGlyph, winrt::Microsoft::UI::Xaml::GridUnitType::Pixel});
-        }
-      }
-    }
-  } else if (kind == DensityKind::Rating) {
-    if (auto const rating = node.try_as<winrt::Microsoft::UI::Xaml::Controls::RatingControl>()) {
-      rating.FontSize(kRatingFontSize);
-      rating.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MinHeightProperty());
-    }
-    if (auto const text = node.try_as<winrt::Microsoft::UI::Xaml::Controls::TextBlock>()) {
-      text.FontSize(kRatingFontSize);
-    }
-    if (auto const icon = node.try_as<winrt::Microsoft::UI::Xaml::Controls::FontIcon>()) {
-      icon.FontSize(kRatingFontSize);
-    }
-  } else if (kind == DensityKind::Badge) {
-    if (auto const badge = node.try_as<winrt::Microsoft::UI::Xaml::Controls::InfoBadge>()) {
-      badge.FontSize(16);
-      badge.MinWidth(kBadgeSize);
-      badge.MinHeight(kBadgeSize);
-      badge.Height(kBadgeSize);
-      // A dot has no label, so the template gives it a tiny explicit width.
-      if (badge.Value() < 0) {
-        badge.Width(kBadgeSize);
-      }
-    }
-    if (auto const text = node.try_as<winrt::Microsoft::UI::Xaml::Controls::TextBlock>()) {
-      text.FontSize(16);
-    }
-    if (auto const element = node.try_as<winrt::Microsoft::UI::Xaml::FrameworkElement>()) {
-      if (!element.try_as<winrt::Microsoft::UI::Xaml::Controls::InfoBadge>() && element.Width() > 0 &&
-          element.Width() < kBadgeSize && element.Height() > 0 && element.Height() < kBadgeSize &&
-          Near(element.Width(), element.Height())) {
-        element.Width(kBadgeSize);
-        element.Height(kBadgeSize);
-      }
-    }
+  if (theme == "dark") {
+    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Dark);
+  } else if (theme == "light") {
+    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Light);
   } else {
-    // Template parts stamp their own FontSize from theme resources, which hides
-    // a FontSize set on the control itself.
-    if (auto const text = node.try_as<winrt::Microsoft::UI::Xaml::Controls::TextBlock>()) {
-      text.FontSize(fontSize);
-    } else if (auto const box = node.try_as<winrt::Microsoft::UI::Xaml::Controls::TextBox>()) {
-      box.FontSize(fontSize);
-      box.MinHeight(kControlMinHeight);
-    } else if (auto const presenter = node.try_as<winrt::Microsoft::UI::Xaml::Controls::ContentPresenter>()) {
-      presenter.FontSize(fontSize);
-    } else if (auto const icon = node.try_as<winrt::Microsoft::UI::Xaml::Controls::FontIcon>()) {
-      icon.FontSize(fontSize);
-    }
-
-    if (auto const element = node.try_as<winrt::Microsoft::UI::Xaml::FrameworkElement>()) {
-      auto const minHeight = element.MinHeight();
-      if (minHeight >= 28.0 && minHeight < kControlMinHeight) {
-        element.MinHeight(kControlMinHeight);
-      }
-    }
+    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Default);
   }
-
-  auto const count = winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper::GetChildrenCount(node);
-  for (int32_t index = 0; index < count; ++index) {
-    ApplyVisualDensity(winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper::GetChild(node, index), kind);
-  }
-}
-
-void ApplyVisualDensity(winrt::Microsoft::UI::Xaml::DependencyObject const& node) {
-  ApplyVisualDensity(node, DensityKind::Standard);
 }
 
 } // namespace
+
+void InsertDouble(
+    winrt::Microsoft::UI::Xaml::ResourceDictionary const& resources,
+    wchar_t const* key,
+    double value) {
+  resources.Insert(winrt::box_value(winrt::hstring{key}), winrt::box_value(value));
+}
+
+void ApplyControlChrome(winrt::Microsoft::UI::Xaml::Controls::Control const& control) {
+  using winrt::Microsoft::UI::Xaml::Controls::CheckBox;
+  using winrt::Microsoft::UI::Xaml::Controls::ComboBox;
+  using winrt::Microsoft::UI::Xaml::Controls::ComboBoxItem;
+  using winrt::Microsoft::UI::Xaml::Controls::InfoBadge;
+  using winrt::Microsoft::UI::Xaml::Controls::ProgressBar;
+  using winrt::Microsoft::UI::Xaml::Controls::RadioButton;
+  using winrt::Microsoft::UI::Xaml::Controls::RatingControl;
+
+  if (control.try_as<ProgressBar>()) {
+    return;
+  }
+
+  if (auto const rating = control.try_as<RatingControl>()) {
+    rating.FontSize(36);
+    return;
+  }
+
+  if (auto const badge = control.try_as<InfoBadge>()) {
+    badge.FontSize(16);
+    badge.MinWidth(28);
+    badge.MinHeight(28);
+    badge.Height(28);
+    return;
+  }
+
+  auto resources = winrt::Microsoft::UI::Xaml::ResourceDictionary{};
+  InsertDouble(resources, L"ControlContentThemeFontSize", 24);
+  InsertDouble(resources, L"BodyTextBlockFontSize", 24);
+
+  if (control.try_as<CheckBox>() || control.try_as<RadioButton>()) {
+    control.FontSize(24);
+    control.VerticalContentAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
+    control.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MinHeightProperty());
+  } else {
+    // 24px type plus 16px of vertical padding fills the 56px row.
+    InsertDouble(resources, L"TextControlThemeMinHeight", 56);
+    resources.Insert(
+        winrt::box_value(winrt::hstring{L"TextControlThemePadding"}),
+        winrt::box_value(winrt::Microsoft::UI::Xaml::Thickness{12, 16, 10, 16}));
+
+    if (control.try_as<ComboBox>()) {
+      auto style = winrt::Microsoft::UI::Xaml::Style{winrt::xaml_typename<ComboBoxItem>()};
+      style.Setters().Append(winrt::Microsoft::UI::Xaml::Setter{
+          winrt::Microsoft::UI::Xaml::Controls::Control::FontSizeProperty(), winrt::box_value(14.0)});
+      style.Setters().Append(winrt::Microsoft::UI::Xaml::Setter{
+          winrt::Microsoft::UI::Xaml::FrameworkElement::MinHeightProperty(), winrt::box_value(32.0)});
+      resources.Insert(winrt::box_value(winrt::xaml_typename<ComboBoxItem>()), style);
+    }
+  }
+
+  control.Resources(resources);
+}
+
+namespace {
+
+void ApplyAutomation(
+    winrt::Microsoft::UI::Xaml::FrameworkElement const& element,
+    winrt::hstring const& label,
+    winrt::hstring const& testId) {
+  if (label.empty()) {
+    element.ClearValue(winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::NameProperty());
+  } else {
+    winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(element, label);
+  }
+
+  if (testId.empty()) {
+    element.ClearValue(winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::AutomationIdProperty());
+  } else {
+    winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(element, testId);
+  }
+}
+
+} // namespace
+
+XamlIslandSession::XamlIslandSession() : m_alive(std::make_shared<bool>(true)) {}
+
+XamlIslandSession::~XamlIslandSession() {
+  if (m_alive) {
+    *m_alive = false;
+  }
+  Close();
+}
 
 void XamlIslandSession::Attach(
     winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView const& view,
     winrt::Microsoft::UI::Xaml::UIElement const& content) {
   Close();
   element = content.as<winrt::Microsoft::UI::Xaml::FrameworkElement>();
+  // Canvas children are measured with the size we set, not the island slot.
+  // Left/Top keeps that measure from being stretched by the parent.
   element.HorizontalAlignment(winrt::Microsoft::UI::Xaml::HorizontalAlignment::Left);
   element.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Top);
 
-  // A Canvas measures children with infinite space, so the control can report
-  // its content size instead of the island's current slot.
   host = winrt::Microsoft::UI::Xaml::Controls::Canvas{};
   host.Children().Append(element);
 
   island = winrt::Microsoft::UI::Xaml::XamlIsland{};
   island.Content(host);
   view.Connect(island.ContentIsland());
+  dispatcher = element.DispatcherQueue();
 
+  auto life = m_alive;
   destroyingRevoker = view.Destroying(
       winrt::auto_revoke,
-      [this](
+      [this, life](
           winrt::Windows::Foundation::IInspectable const&,
-          winrt::Microsoft::ReactNative::ComponentView const&) { Close(); });
+          winrt::Microsoft::ReactNative::ComponentView const&) {
+        if (life && *life) {
+          Close();
+        }
+      });
 
   layoutRevoker = view.LayoutMetricsChanged(
       winrt::auto_revoke,
-      [this](
+      [this, life](
           winrt::Windows::Foundation::IInspectable const&,
           winrt::Microsoft::ReactNative::LayoutMetricsChangedArgs const& args) {
-        layoutWidth = args.NewLayoutMetrics().Frame.Width;
+        if (!life || !*life) {
+          return;
+        }
+        auto const width = args.NewLayoutMetrics().Frame.Width;
+        if (m_hasMeasured && std::abs(width - layoutWidth) < 0.5f) {
+          return;
+        }
+        layoutWidth = width;
         Invalidate();
       });
 
-  loadedRevoker = element.Loaded(winrt::auto_revoke, [this](auto const&, auto const&) { Invalidate(); });
+  loadedRevoker = element.Loaded(winrt::auto_revoke, [this, life](auto const&, auto const&) {
+    if (life && *life) {
+      Invalidate();
+    }
+  });
+
+  // HighContrastChanged fails with ERROR_NOT_FOUND (0x80070490) on this host.
+  // ApplyTheme still reads HighContrast() whenever props are applied.
+  accessibility = winrt::Windows::UI::ViewManagement::AccessibilitySettings{};
+  try {
+    contrastRevoker = accessibility.HighContrastChanged(
+        winrt::auto_revoke, [this, life](auto const&, auto const&) {
+          if (!life || !*life) {
+            return;
+          }
+          if (dispatcher) {
+            dispatcher.TryEnqueue([this, life] {
+              if (life && *life) {
+                ApplyRememberedTheme();
+              }
+            });
+            return;
+          }
+          ApplyRememberedTheme();
+        });
+  } catch (winrt::hresult_error const&) {
+    contrastRevoker.revoke();
+  }
 }
 
 void XamlIslandSession::Close() noexcept {
   layoutRevoker.revoke();
   loadedRevoker.revoke();
   destroyingRevoker.revoke();
+  contrastRevoker.revoke();
   element = nullptr;
   host = nullptr;
   state = nullptr;
+  dispatcher = nullptr;
+  accessibility = nullptr;
   layoutWidth = 0;
+  m_hasMeasured = false;
+  m_queued = false;
+  m_remeasure = false;
   if (!island) {
     return;
   }
@@ -241,132 +244,140 @@ void XamlIslandSession::SetState(winrt::Microsoft::ReactNative::IComponentState 
   Invalidate();
 }
 
+void XamlIslandSession::RememberTheme(std::string theme) {
+  m_theme = std::move(theme);
+  ApplyRememberedTheme();
+}
+
+void XamlIslandSession::ApplyRememberedTheme() {
+  if (!element) {
+    return;
+  }
+  auto settings = accessibility ? accessibility : winrt::Windows::UI::ViewManagement::AccessibilitySettings{};
+  ApplyTheme(element, m_theme, settings);
+}
+
 void XamlIslandSession::Invalidate() {
-  if (measuring || !element || !state || !state.Data()) {
+  if (!element || !state || !state.Data() || !m_alive || !*m_alive) {
+    return;
+  }
+  if (m_measuring) {
+    m_remeasure = true;
+    return;
+  }
+  if (m_queued) {
+    return;
+  }
+  EnqueueMeasure();
+}
+
+void XamlIslandSession::EnqueueMeasure() {
+  auto life = m_alive;
+  auto run = [this, life] {
+    if (!life || !*life) {
+      return;
+    }
+    m_queued = false;
+    MeasureNow();
+  };
+
+  if (dispatcher) {
+    m_queued = true;
+    if (dispatcher.TryEnqueue(run)) {
+      return;
+    }
+    m_queued = false;
+  }
+  MeasureNow();
+}
+
+void XamlIslandSession::MeasureNow() {
+  if (m_measuring || !element || !state || !state.Data()) {
     return;
   }
 
-  MeasuringGuard guard{measuring};
+  {
+  MeasuringGuard guard{m_measuring};
 
   auto const infinite = std::numeric_limits<float>::infinity();
-  auto const applyChrome = [](winrt::Microsoft::UI::Xaml::FrameworkElement const& target) {
-    if (auto const control = target.try_as<winrt::Microsoft::UI::Xaml::Controls::Control>()) {
-      if (!control.try_as<winrt::Microsoft::UI::Xaml::Controls::ProgressBar>()) {
-        ApplyVisualDensity(control);
-      }
-    }
-  };
-
-  // Stars and badge dots are created when the template is measured, so the
-  // second pass sizes parts that did not exist yet.
-  applyChrome(element);
   element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::WidthProperty());
   element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::HeightProperty());
   element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MaxWidthProperty());
+  // The first pass creates template parts (rating stars, badge dots).
+  // The second pass includes them in DesiredSize.
   element.Measure({infinite, infinite});
-  applyChrome(element);
-  element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::WidthProperty());
-  element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::HeightProperty());
-  element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MaxWidthProperty());
   element.Measure({infinite, infinite});
   auto natural = element.DesiredSize();
   natural.Width = std::ceil(natural.Width);
   natural.Height = std::ceil(natural.Height);
 
-  winrt::Windows::Foundation::Size wrapped{0, 0};
-  float wrappedWidth = 0;
-  auto const slot = layoutWidth;
-  if (slot > 1.f && std::isfinite(slot) && std::abs(slot - natural.Width) > 1.f) {
-    auto const width = std::ceil(slot);
-    element.Width(width);
-    element.Measure({width, infinite});
-    wrapped = element.DesiredSize();
-    wrapped.Width = width;
-    wrapped.Height = std::ceil(wrapped.Height) + 1.f;
-    wrappedWidth = width;
+  bool const empty = !(natural.Width > 0.f) || !(natural.Height > 0.f);
+  if (!(empty && !element.IsLoaded())) {
+    winrt::Windows::Foundation::Size wrapped{0, 0};
+    float wrappedWidth = 0;
+    auto const slot = layoutWidth;
+    if (!empty && slot > 1.f && std::isfinite(slot) && std::abs(slot - natural.Width) > 1.f) {
+      auto const width = std::ceil(slot);
+      element.Width(width);
+      element.Measure({width, infinite});
+      wrapped = element.DesiredSize();
+      wrapped.Width = width;
+      wrapped.Height = std::ceil(wrapped.Height);
+      wrappedWidth = width;
+    }
+
+    auto const current = winrt::get_self<MeasuredSize>(state.Data());
+    auto const unchanged = current && current->hasMeasured && SameSize(current->natural, natural) &&
+        SameSize(current->wrapped, wrapped) && current->wrappedWidth == wrappedWidth;
+    if (!unchanged) {
+      state.UpdateStateWithMutation([natural, wrapped, wrappedWidth](winrt::Windows::Foundation::IInspectable const&) {
+        auto measured = winrt::make_self<MeasuredSize>();
+        measured->natural = natural;
+        measured->wrapped = wrapped;
+        measured->wrappedWidth = wrappedWidth;
+        measured->hasMeasured = true;
+        return measured.as<winrt::Windows::Foundation::IInspectable>();
+      });
+    }
+    m_hasMeasured = true;
+  }
   }
 
-  if (!(natural.Width > 0) || !(natural.Height > 0)) {
-    return;
-  }
-
-  auto const current = winrt::get_self<MeasuredSize>(state.Data());
-  auto const unchanged = current && SameSize(current->natural, natural) && SameSize(current->wrapped, wrapped) &&
-      current->wrappedWidth == wrappedWidth;
-  if (!unchanged) {
-    state.UpdateStateWithMutation([natural, wrapped, wrappedWidth](winrt::Windows::Foundation::IInspectable const&) {
-      auto measured = winrt::make_self<MeasuredSize>();
-      measured->natural = natural;
-      measured->wrapped = wrapped;
-      measured->wrappedWidth = wrappedWidth;
-      return measured.as<winrt::Windows::Foundation::IInspectable>();
-    });
-  }
-
-}
-
-void ApplyTheme(
-    winrt::Microsoft::UI::Xaml::FrameworkElement const& element,
-    std::string const& theme) {
-  winrt::Windows::UI::ViewManagement::AccessibilitySettings accessibility;
-  if (accessibility.HighContrast()) {
-    element.HighContrastAdjustment(winrt::Microsoft::UI::Xaml::ElementHighContrastAdjustment::Auto);
-    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Default);
-    return;
-  }
-
-  if (theme == "dark") {
-    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Dark);
-  } else if (theme == "light") {
-    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Light);
-  } else {
-    element.RequestedTheme(winrt::Microsoft::UI::Xaml::ElementTheme::Default);
+  if (m_remeasure && element && state) {
+    m_remeasure = false;
+    EnqueueMeasure();
   }
 }
 
-void ApplyControlDensity(winrt::Microsoft::UI::Xaml::Controls::Control const& element) {
-  // Progress bars stay a thin track. Theme dictionaries are left alone: a larger
-  // ControlContentThemeFontSize is inherited by popups such as the ComboBox list.
-  if (element.try_as<winrt::Microsoft::UI::Xaml::Controls::ProgressBar>()) {
-    return;
+void GuardedCall(wchar_t const* name, std::function<void()> const& action) noexcept {
+  try {
+    action();
+  } catch (winrt::hresult_error const& error) {
+    auto message = std::wstring(L"react-native-winui ") + name + L": " + error.message().c_str() + L"\n";
+    OutputDebugStringW(message.c_str());
+  } catch (std::exception const& error) {
+    auto message = std::wstring(L"react-native-winui ") + name + L": ";
+    for (char const ch : std::string{error.what()}) {
+      message.push_back(static_cast<wchar_t>(static_cast<unsigned char>(ch)));
+    }
+    message.push_back(L'\n');
+    OutputDebugStringW(message.c_str());
+  } catch (...) {
+    auto message = std::wstring(L"react-native-winui ") + name + L": unknown exception\n";
+    OutputDebugStringW(message.c_str());
   }
-
-  if (auto const badge = element.try_as<winrt::Microsoft::UI::Xaml::Controls::InfoBadge>()) {
-    badge.FontSize(16);
-    badge.MinWidth(kBadgeSize);
-    badge.MinHeight(kBadgeSize);
-    badge.Height(kBadgeSize);
-    return;
-  }
-
-  if (auto const rating = element.try_as<winrt::Microsoft::UI::Xaml::Controls::RatingControl>()) {
-    rating.FontSize(kRatingFontSize);
-    return;
-  }
-
-  // A tall minimum pins the checkbox and radio glyphs to the top of the row
-  // while the label stays vertically centered.
-  if (element.try_as<winrt::Microsoft::UI::Xaml::Controls::CheckBox>() ||
-      element.try_as<winrt::Microsoft::UI::Xaml::Controls::RadioButton>()) {
-    element.FontSize(kControlFontSize);
-    element.VerticalContentAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Center);
-    element.ClearValue(winrt::Microsoft::UI::Xaml::FrameworkElement::MinHeightProperty());
-    return;
-  }
-
-  element.FontSize(kControlFontSize);
-  element.MinHeight(kControlMinHeight);
 }
 
 void PrepareElement(
     winrt::Microsoft::UI::Xaml::Controls::Control const& element,
     std::optional<std::string> const& theme,
-    std::optional<bool> const& disabled) {
-  element.HorizontalAlignment(winrt::Microsoft::UI::Xaml::HorizontalAlignment::Stretch);
-  element.VerticalAlignment(winrt::Microsoft::UI::Xaml::VerticalAlignment::Stretch);
+    std::optional<bool> const& disabled,
+    winrt::Microsoft::ReactNative::ViewProps const& viewProps,
+    XamlIslandSession& session) {
   element.IsEnabled(!disabled.value_or(false));
-  ApplyControlDensity(element);
-  ApplyTheme(element, theme.value_or("system"));
+  auto props = viewProps;
+  ApplyAutomation(element, props.AccessibilityLabel(), props.TestId());
+  session.RememberTheme(theme.value_or("system"));
 }
 
 void WrapTextBlocks(winrt::Microsoft::UI::Xaml::DependencyObject const& root) {
@@ -406,9 +417,7 @@ void ConfigureXamlIsland(
       });
 
   viewBuilder.SetInitialStateDataFactory(
-      [](winrt::Microsoft::ReactNative::IComponentProps const&) noexcept {
-        return winrt::make<MeasuredSize>();
-      });
+      [](winrt::Microsoft::ReactNative::IComponentProps const&) noexcept { return winrt::make<MeasuredSize>(); });
 
   viewBuilder.SetMeasureContentHandler(
       [fallback](
@@ -421,7 +430,10 @@ void ConfigureXamlIsland(
 
         if (auto const data = shadowNode.StateData()) {
           auto const current = winrt::get_self<MeasuredSize>(data);
-          if (current && current->natural.Width > 0.f && current->natural.Height > 0.f) {
+          if (current && current->hasMeasured) {
+            if (!(current->natural.Width > 0.f) || !(current->natural.Height > 0.f)) {
+              return current->natural;
+            }
             if (widthExact && current->wrapped.Height > 0.f && std::abs(current->wrappedWidth - maxWidth) < 1.f) {
               return winrt::Windows::Foundation::Size{maxWidth, current->wrapped.Height};
             }

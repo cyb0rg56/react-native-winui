@@ -5,77 +5,115 @@
 #include "XamlControl.h"
 #include "codegen/react/components/RNWinuiSpec/NumberBox.g.h"
 
+#include <cmath>
+#include <limits>
+
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 namespace winrt::Winui {
 
+namespace {
+
+double NumberMinimum(std::optional<double> const& value) {
+  return value.value_or(std::numeric_limits<double>::lowest());
+}
+
+double NumberMaximum(std::optional<double> const& value) {
+  return value.value_or((std::numeric_limits<double>::max)());
+}
+
+winrt::Microsoft::UI::Xaml::Controls::NumberBoxSpinButtonPlacementMode SpinMode(std::optional<std::string> const& value) {
+  using winrt::Microsoft::UI::Xaml::Controls::NumberBoxSpinButtonPlacementMode;
+  auto const mode = value.value_or("compact");
+  if (mode == "hidden") {
+    return NumberBoxSpinButtonPlacementMode::Hidden;
+  }
+  if (mode == "inline") {
+    return NumberBoxSpinButtonPlacementMode::Inline;
+  }
+  return NumberBoxSpinButtonPlacementMode::Compact;
+}
+
+} // namespace
+
 struct NumberBoxComponentView
     : winrt::implements<NumberBoxComponentView, winrt::IInspectable>,
-      winuiCodegen::BaseNumberBox<NumberBoxComponentView> {
+      XamlComponentView<
+          NumberBoxComponentView,
+          winuiCodegen::BaseNumberBox<NumberBoxComponentView>,
+          winrt::Microsoft::UI::Xaml::Controls::NumberBox> {
   void Attach(winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView const& view) {
-    m_box = winrt::Microsoft::UI::Xaml::Controls::NumberBox();
-    m_box.HorizontalAlignment(winrt::Microsoft::UI::Xaml::HorizontalAlignment::Stretch);
-    auto weakThis = get_weak();
-    m_sizeRevoker = m_box.SizeChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->m_session.Invalidate();
-      }
-    });
-    AttachEvents();
-    m_session.Attach(view, m_box);
-  }
-
-  ~NumberBoxComponentView() {
-    m_session.Close();
+    Host(view, winrt::Microsoft::UI::Xaml::Controls::NumberBox());
   }
 
   void UpdateProps(
       winrt::Microsoft::ReactNative::ComponentView const& view,
       winrt::com_ptr<winuiCodegen::NumberBoxProps> const& newProps,
-      winrt::com_ptr<winuiCodegen::NumberBoxProps> const&) noexcept override {
-    BaseNumberBox::UpdateProps(view, newProps, nullptr);
-    if (!newProps || !m_box) {
-      return;
-    }
+      winrt::com_ptr<winuiCodegen::NumberBoxProps> const& oldProps) noexcept override {
+    winuiCodegen::BaseNumberBox<NumberBoxComponentView>::UpdateProps(view, newProps, oldProps);
+    GuardedCall(L"NumberBox.UpdateProps", [&] {
+      if (!newProps || !m_control) {
+        return;
+      }
 
-    WithEventsSuspended([&] {
-      PrepareElement(m_box, newProps->theme, newProps->disabled);
-      m_box.PlaceholderText(ToHString(newProps->placeholder));
-      if (newProps->minimum) {
-        m_box.Minimum(*newProps->minimum);
+      bool changed = !oldProps;
+      WithEventsSuspended([&] {
+        if (ChromeChanged(newProps, oldProps)) {
+          PrepareElement(m_control, newProps->theme, newProps->disabled, newProps->ViewProps, m_session);
+          changed = true;
+        }
+        if (!oldProps || oldProps->placeholder != newProps->placeholder) {
+          m_control.PlaceholderText(ToHString(newProps->placeholder));
+          changed = true;
+        }
+        if (!oldProps || oldProps->minimum != newProps->minimum) {
+          m_control.Minimum(NumberMinimum(newProps->minimum));
+          changed = true;
+        }
+        if (!oldProps || oldProps->maximum != newProps->maximum) {
+          m_control.Maximum(NumberMaximum(newProps->maximum));
+          changed = true;
+        }
+        if (!oldProps || oldProps->step != newProps->step) {
+          m_control.SmallChange(newProps->step.value_or(1));
+          changed = true;
+        }
+        if (!oldProps || oldProps->spinButtons != newProps->spinButtons) {
+          m_control.SpinButtonPlacementMode(SpinMode(newProps->spinButtons));
+          changed = true;
+        }
+        if (!oldProps || oldProps->value != newProps->value) {
+          ApplyValue(*newProps);
+          changed = true;
+        }
+      });
+      if (changed) {
+        m_session.Invalidate();
       }
-      if (newProps->maximum) {
-        m_box.Maximum(*newProps->maximum);
-      }
-      if (newProps->step) {
-        m_box.SmallChange(*newProps->step);
-      }
-      m_box.Value(newProps->value.value_or(0));
     });
-    m_session.Invalidate();
   }
 
-  void UpdateState(
-      winrt::Microsoft::ReactNative::ComponentView const&,
-      winrt::Microsoft::ReactNative::IComponentState const& newState) noexcept override {
-    m_state = newState;
-    m_session.SetState(newState);
+ protected:
+  void AttachEvents() override {
+    auto weakThis = get_weak();
+    m_valueRevoker = m_control.ValueChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
+      if (auto self = weakThis.get()) {
+        GuardedCall(L"NumberBox.ValueChanged", [&] { self->EmitValue(); });
+      }
+    });
+  }
+
+  void DetachEvents() override {
+    m_valueRevoker.revoke();
   }
 
  private:
-  void AttachEvents() {
-    auto weakThis = get_weak();
-    m_valueRevoker = m_box.ValueChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->EmitValue();
-      }
-    });
-  }
-
-  void WithEventsSuspended(auto&& action) {
-    m_valueRevoker.revoke();
-    action();
-    AttachEvents();
+  void ApplyValue(winuiCodegen::NumberBoxProps const& props) {
+    if (props.value && std::isfinite(*props.value)) {
+      m_control.Value(*props.value);
+    } else {
+      m_control.Value(std::numeric_limits<double>::quiet_NaN());
+    }
   }
 
   void EmitValue() {
@@ -83,30 +121,22 @@ struct NumberBoxComponentView
     if (!emitter) {
       return;
     }
+    auto const raw = m_control.Value();
     winuiCodegen::NumberBoxSpec_onValueChange args{};
-    args.value = m_box.Value();
+    args.isEmpty = !std::isfinite(raw);
+    args.value = args.isEmpty ? 0 : raw;
     emitter->onValueChange(std::move(args));
+    RestoreProps([this](winuiCodegen::NumberBoxProps const& props) { ApplyValue(props); });
   }
 
-  XamlIslandSession m_session;
-  winrt::Microsoft::UI::Xaml::Controls::NumberBox m_box{nullptr};
-  winrt::Microsoft::ReactNative::IComponentState m_state{nullptr};
   winrt::Microsoft::UI::Xaml::Controls::NumberBox::ValueChanged_revoker m_valueRevoker;
-  winrt::Microsoft::UI::Xaml::FrameworkElement::SizeChanged_revoker m_sizeRevoker;
 };
 
 } // namespace winrt::Winui
 
-void RegisterNumberBoxComponentView(
-    winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
+void RegisterNumberBoxComponentView(winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
   winuiCodegen::RegisterNumberBoxNativeComponent<winrt::Winui::NumberBoxComponentView>(
-      packageBuilder,
-      [](winrt::Microsoft::ReactNative::Composition::IReactCompositionViewComponentBuilder const& builder) {
-        winrt::Winui::ConfigureXamlIsland(
-            builder, {160, 56}, [](auto const& view) {
-              auto userData = winrt::make_self<winrt::Winui::NumberBoxComponentView>();
-              userData->Attach(view);
-              view.UserData(*userData);
-            });
+      packageBuilder, [](auto const& builder) {
+        winrt::Winui::RegisterHostedControl<winrt::Winui::NumberBoxComponentView>(builder, {160, 56});
       });
 }

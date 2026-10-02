@@ -11,49 +11,75 @@ namespace winrt::Winui {
 
 struct InfoBarComponentView
     : winrt::implements<InfoBarComponentView, winrt::IInspectable>,
-      winuiCodegen::BaseInfoBar<InfoBarComponentView> {
+      XamlComponentView<
+          InfoBarComponentView,
+          winuiCodegen::BaseInfoBar<InfoBarComponentView>,
+          winrt::Microsoft::UI::Xaml::Controls::InfoBar> {
   void Attach(winrt::Microsoft::ReactNative::Composition::ContentIslandComponentView const& view) {
-    m_bar = winrt::Microsoft::UI::Xaml::Controls::InfoBar();
-    auto weakThis = get_weak();
-    m_sizeRevoker = m_bar.SizeChanged(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->m_session.Invalidate();
-      }
-    });
-    AttachEvents();
-    m_session.Attach(view, m_bar);
-  }
-
-  ~InfoBarComponentView() {
-    m_session.Close();
+    Host(view, winrt::Microsoft::UI::Xaml::Controls::InfoBar());
   }
 
   void UpdateProps(
       winrt::Microsoft::ReactNative::ComponentView const& view,
       winrt::com_ptr<winuiCodegen::InfoBarProps> const& newProps,
-      winrt::com_ptr<winuiCodegen::InfoBarProps> const&) noexcept override {
-    BaseInfoBar::UpdateProps(view, newProps, nullptr);
-    if (!newProps || !m_bar) {
-      return;
-    }
+      winrt::com_ptr<winuiCodegen::InfoBarProps> const& oldProps) noexcept override {
+    winuiCodegen::BaseInfoBar<InfoBarComponentView>::UpdateProps(view, newProps, oldProps);
+    GuardedCall(L"InfoBar.UpdateProps", [&] {
+      if (!newProps || !m_control) {
+        return;
+      }
 
-    WithEventsSuspended([&] {
-      PrepareElement(m_bar, newProps->theme, newProps->disabled);
-      m_bar.Title(ToHString(newProps->title));
-      m_bar.Message(ToHString(newProps->message));
-      m_bar.Severity(SeverityFrom(newProps->severity.value_or("informational")));
-      m_bar.IsClosable(newProps->isClosable);
-      m_bar.IsOpen(newProps->isOpen);
-      WrapTextBlocks(m_bar);
+      bool changed = !oldProps;
+      WithEventsSuspended([&] {
+        if (ChromeChanged(newProps, oldProps)) {
+          PrepareElement(m_control, newProps->theme, newProps->disabled, newProps->ViewProps, m_session);
+          changed = true;
+        }
+        if (!oldProps || oldProps->title != newProps->title) {
+          m_control.Title(ToHString(newProps->title));
+          changed = true;
+        }
+        if (!oldProps || oldProps->message != newProps->message) {
+          m_control.Message(ToHString(newProps->message));
+          WrapTextBlocks(m_control);
+          changed = true;
+        }
+        if (!oldProps || oldProps->severity != newProps->severity) {
+          m_control.Severity(SeverityFrom(newProps->severity.value_or("informational")));
+          changed = true;
+        }
+        if (!oldProps || oldProps->isClosable != newProps->isClosable) {
+          m_control.IsClosable(newProps->isClosable);
+          changed = true;
+        }
+        if (!oldProps || oldProps->isOpen != newProps->isOpen) {
+          ApplyOpen(*newProps);
+          changed = true;
+        }
+      });
+      if (changed) {
+        m_session.Invalidate();
+      }
     });
-    m_session.Invalidate();
   }
 
-  void UpdateState(
-      winrt::Microsoft::ReactNative::ComponentView const&,
-      winrt::Microsoft::ReactNative::IComponentState const& newState) noexcept override {
-    m_state = newState;
-    m_session.SetState(newState);
+ protected:
+  void AttachEvents() override {
+    auto weakThis = get_weak();
+    // Closing fires before IsOpen becomes false. Cancel keeps the prop in
+    // charge and the event reports the close the parent can accept.
+    m_closingRevoker = m_control.Closing(
+        winrt::auto_revoke,
+        [weakThis](auto const&, winrt::Microsoft::UI::Xaml::Controls::InfoBarClosingEventArgs const& args) {
+          args.Cancel(true);
+          if (auto self = weakThis.get()) {
+            GuardedCall(L"InfoBar.Closing", [&] { self->EmitClose(); });
+          }
+        });
+  }
+
+  void DetachEvents() override {
+    m_closingRevoker.revoke();
   }
 
  private:
@@ -71,19 +97,8 @@ struct InfoBarComponentView
     return InfoBarSeverity::Informational;
   }
 
-  void AttachEvents() {
-    auto weakThis = get_weak();
-    m_closeRevoker = m_bar.CloseButtonClick(winrt::auto_revoke, [weakThis](auto const&, auto const&) {
-      if (auto self = weakThis.get()) {
-        self->EmitClose();
-      }
-    });
-  }
-
-  void WithEventsSuspended(auto&& action) {
-    m_closeRevoker.revoke();
-    action();
-    AttachEvents();
+  void ApplyOpen(winuiCodegen::InfoBarProps const& props) {
+    m_control.IsOpen(props.isOpen);
   }
 
   void EmitClose() {
@@ -92,27 +107,19 @@ struct InfoBarComponentView
       return;
     }
     winuiCodegen::InfoBarSpec_onClose args{};
-    args.isOpen = m_bar.IsOpen();
+    args.isOpen = false;
     emitter->onClose(std::move(args));
+    RestoreProps([this](winuiCodegen::InfoBarProps const& props) { ApplyOpen(props); });
   }
 
-  XamlIslandSession m_session;
-  winrt::Microsoft::UI::Xaml::Controls::InfoBar m_bar{nullptr};
-  winrt::Microsoft::ReactNative::IComponentState m_state{nullptr};
-  winrt::Microsoft::UI::Xaml::Controls::InfoBar::CloseButtonClick_revoker m_closeRevoker;
-  winrt::Microsoft::UI::Xaml::FrameworkElement::SizeChanged_revoker m_sizeRevoker;
+  winrt::Microsoft::UI::Xaml::Controls::InfoBar::Closing_revoker m_closingRevoker;
 };
 
 } // namespace winrt::Winui
 
-void RegisterInfoBarComponentView(
-    winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
+void RegisterInfoBarComponentView(winrt::Microsoft::ReactNative::IReactPackageBuilder const& packageBuilder) {
   winuiCodegen::RegisterInfoBarNativeComponent<winrt::Winui::InfoBarComponentView>(
       packageBuilder, [](auto const& builder) {
-        winrt::Winui::ConfigureXamlIsland(builder, {360, 128}, [](auto const& view) {
-          auto userData = winrt::make_self<winrt::Winui::InfoBarComponentView>();
-          userData->Attach(view);
-          view.UserData(*userData);
-        });
+        winrt::Winui::RegisterHostedControl<winrt::Winui::InfoBarComponentView>(builder, {320, 64});
       });
 }

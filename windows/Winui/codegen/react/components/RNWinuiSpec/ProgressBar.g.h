@@ -26,6 +26,8 @@ struct ProgressBarProps : winrt::implements<ProgressBarProps, winrt::Microsoft::
      if (cloneFrom) {
        auto cloneFromProps = cloneFrom.as<ProgressBarProps>();
        value = cloneFromProps->value;
+       minimum = cloneFromProps->minimum;
+       maximum = cloneFromProps->maximum;
        isIndeterminate = cloneFromProps->isIndeterminate;
        disabled = cloneFromProps->disabled;
        theme = cloneFromProps->theme;
@@ -39,6 +41,12 @@ struct ProgressBarProps : winrt::implements<ProgressBarProps, winrt::Microsoft::
 
   REACT_FIELD(value)
   std::optional<double> value{};
+
+  REACT_FIELD(minimum)
+  std::optional<double> minimum{};
+
+  REACT_FIELD(maximum)
+  double maximum{100};
 
   REACT_FIELD(isIndeterminate)
   std::optional<bool> isIndeterminate{};

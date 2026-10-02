@@ -21,18 +21,8 @@
   "files": [
     "src",
     "lib",
-    "android",
-    "ios",
-    "cpp",
-    "*.podspec",
     "react-native.config.js",
     "windows",
-    "!ios/build",
-    "!android/build",
-    "!android/gradle",
-    "!android/gradlew",
-    "!android/gradlew.bat",
-    "!android/local.properties",
     "!windows/**/ARM64",
     "!windows/**/x64",
     "!windows/**/Win32",
@@ -47,7 +37,7 @@
     "test": "jest",
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
+    "clean": "del-cli lib example/windows/WinuiExample/Generated\\ Files example/windows/ARM64 example/windows/x64",
     "prepare": "bob build",
     "release": "release-it"
   },
@@ -62,7 +52,7 @@
     "type": "git",
     "url": "git+https://github.com/react-native-winui/react-native-winui.git"
   },
-  "author": "react-native-winui <dev@example.com> (https://github.com/react-native-winui/react-native-winui)",
+  "author": "react-native-winui",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/react-native-winui/react-native-winui/issues"
@@ -98,8 +88,8 @@
     "typescript": "^5.2.2"
   },
   "peerDependencies": {
-    "react": "*",
-    "react-native": "*",
+    "react": ">=19.0.0",
+    "react-native": ">=0.82.0",
     "react-native-windows": ">=0.82.0"
   },
   "workspaces": [
@@ -172,7 +162,6 @@
     "source": "src",
     "output": "lib",
     "targets": [
-      "codegen",
       [
         "module",
         {
@@ -197,13 +186,6 @@
     "name": "RNWinuiSpec",
     "type": "all",
     "jsSrcsDir": "src",
-    "outputDir": {
-      "ios": "ios/generated",
-      "android": "android/generated"
-    },
-    "android": {
-      "javaPackageName": "com.winui"
-    },
     "includesGeneratedCode": true,
     "windows": {
       "namespace": "winuiCodegen",
@@ -216,8 +198,8 @@
     }
   },
   "create-react-native-library": {
-    "languages": "kotlin-objc",
-    "type": "turbo-module",
+    "languages": "cpp",
+    "type": "fabric-view",
     "version": "0.48.9"
   },
   "react-native-windows": {
